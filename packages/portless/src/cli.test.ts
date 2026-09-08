@@ -222,6 +222,7 @@ describe("CLI", () => {
       expect(stdout).toContain("service install");
       expect(stdout).toContain("portless run");
       expect(stdout).toContain("portless get");
+      expect(stdout).toContain("portless find");
       expect(stdout).toContain("run [--name <name>]");
       expect(stdout).toContain("portless doctor");
       expect(stdout).toContain("--port");
@@ -275,6 +276,81 @@ describe("CLI", () => {
       // it doesn't crash and returns 0.
       const { status } = run(["list"]);
       expect(status).toBe(0);
+    });
+  });
+
+  describe("find", () => {
+    it("shows only the matching active route", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-"));
+      try {
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([
+            { hostname: "frontend.localhost", port: 4310, pid: 0 },
+            {
+              hostname: "backend.localhost",
+              port: 4320,
+              pid: 0,
+              ngrokUrl: "https://backend.ngrok.app",
+            },
+          ])
+        );
+
+        const { status, stdout } = run(["find", "backend"], {
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(0);
+        expect(stdout).toContain("Found route:");
+        expect(stdout).toContain("backend.localhost");
+        expect(stdout).toContain("localhost:4320");
+        expect(stdout).toContain("ngrok: https://backend.ngrok.app");
+        expect(stdout).not.toContain("frontend.localhost");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("prints only the app port with --port-only", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-port-"));
+      try {
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([{ hostname: "backend.localhost", port: 4320, pid: 0 }])
+        );
+
+        const { status, stdout, stderr } = run(["find", "backend", "--port-only"], {
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(0);
+        expect(stdout).toBe("4320\n");
+        expect(stderr).toBe("");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("exits 1 when the route is not active", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-missing-"));
+      try {
+        const { status, stdout, stderr } = run(["find", "missing"], {
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(1);
+        expect(stdout).toBe("");
+        expect(stderr).toContain('No active route found for "missing"');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("prints command help", () => {
+      const { status, stdout } = run(["find", "--help"]);
+      expect(status).toBe(0);
+      expect(stdout).toContain("portless find <name>");
+      expect(stdout).toContain("--port-only");
     });
   });
 

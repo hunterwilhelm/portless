@@ -1835,6 +1835,7 @@ ${colors.bold("Usage:")}
   ${colors.cyan("portless alias <name> <port>")}     Register a static route (e.g. for Docker)
   ${colors.cyan("portless alias --remove <name>")}   Remove a static route
   ${colors.cyan("portless list")}                    Show active routes
+  ${colors.cyan("portless find <name>")}             Find an active route by name
   ${colors.cyan("portless doctor")}                  Check local portless health
   ${colors.cyan("portless trust")}                   Add local CA to system trust store
   ${colors.cyan("portless clean")}                   Remove portless state, trust entry, and hosts block
@@ -2004,7 +2005,7 @@ ${colors.bold("Skip portless:")}
   PORTLESS=0 pnpm dev           # Runs command directly without proxy
 
 ${colors.bold("Reserved names:")}
-  run, get, alias, hosts, list, doctor, trust, clean, prune, proxy, service are subcommands and
+  run, get, alias, hosts, list, find, doctor, trust, clean, prune, proxy, service are subcommands and
   cannot be used as app names directly. Use "portless run" to infer the name,
   or "portless --name <name>" to force any name including reserved ones.
 `);
@@ -2270,6 +2271,86 @@ async function handleList(): Promise<void> {
     onWarning: (msg) => console.warn(colors.yellow(msg)),
   });
   listRoutes(store, port, tls);
+}
+
+async function handleFind(args: string[]): Promise<void> {
+  if (args[1] === "--help" || args[1] === "-h") {
+    console.log(`
+${colors.bold("portless find")} - Find an active route by name.
+
+${colors.bold("Usage:")}
+  ${colors.cyan("portless find <name>")}
+  ${colors.cyan("portless find <name> --port-only")}
+
+${colors.bold("Options:")}
+  --port-only            Print only the app port
+  --help, -h             Show this help
+
+${colors.bold("Examples:")}
+  portless find backend
+  BACKEND_PORT=$(portless find backend --port-only)
+`);
+    process.exit(0);
+  }
+
+  const positional: string[] = [];
+  let portOnly = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--port-only") {
+      portOnly = true;
+    } else if (args[i].startsWith("-")) {
+      console.error(colors.red(`Error: Unknown flag "${args[i]}".`));
+      console.error(colors.blue("Known flags: --port-only, --help"));
+      process.exit(1);
+    } else {
+      positional.push(args[i]);
+    }
+  }
+
+  if (positional.length !== 1) {
+    console.error(
+      colors.red(`Error: ${positional.length === 0 ? "Missing" : "Too many"} route names.`)
+    );
+    console.error(colors.blue("Usage:"));
+    console.error(colors.cyan("  portless find <name> [--port-only]"));
+    process.exit(1);
+  }
+
+  const name = positional[0]!;
+  const { dir, port, tls, tlds } = await discoverState();
+  const store = new RouteStore(dir, {
+    onWarning: (msg) => console.warn(colors.yellow(msg)),
+  });
+  const routes = store.loadRoutes();
+  const route = buildHostnames(name, tlds)
+    .map((hostname) => routes.find((candidate) => candidate.hostname === hostname))
+    .find((candidate) => candidate !== undefined);
+
+  if (!route) {
+    console.error(colors.red(`Error: No active route found for "${name}".`));
+    process.exit(1);
+  }
+
+  if (portOnly) {
+    process.stdout.write(`${route.port}\n`);
+    return;
+  }
+
+  const url = formatUrl(route.hostname, port, tls);
+  const label = route.pid === 0 ? "(alias)" : `(pid ${route.pid})`;
+  console.log(colors.blue.bold("\nFound route:\n"));
+  console.log(
+    `  ${colors.cyan(url)}  ${colors.gray("->")}  ${colors.white(`localhost:${route.port}`)}  ${colors.gray(label)}`
+  );
+  if (route.tailscaleUrl) {
+    const tsLabel = route.tailscaleFunnel ? "funnel" : "tailscale";
+    console.log(`    ${colors.gray(tsLabel + ":")} ${colors.green(route.tailscaleUrl)}`);
+  }
+  if (route.ngrokUrl) {
+    console.log(`    ${colors.gray("ngrok:")} ${colors.green(route.ngrokUrl)}`);
+  }
+  console.log();
 }
 
 async function handleGet(args: string[], skipWorktree = false): Promise<void> {
@@ -4290,6 +4371,7 @@ async function main() {
     "clean",
     "prune",
     "list",
+    "find",
     "doctor",
     "get",
     "alias",
@@ -4411,7 +4493,7 @@ async function main() {
 
   // --name flag: treat the next arg as an explicit app name, bypassing
   // subcommand dispatch. Useful when the app name collides with a reserved
-  // subcommand (run, alias, hosts, list, doctor, trust, clean, prune, proxy, service).
+  // subcommand (run, alias, hosts, list, find, doctor, trust, clean, prune, proxy, service).
   if (args[0] === "--name") {
     args.shift();
     if (!args[0]) {
@@ -4472,7 +4554,7 @@ async function main() {
     return;
   }
 
-  // Global dispatch: help, version, trust, clean, prune, list, doctor, alias, hosts, proxy, service
+  // Global dispatch: help, version, trust, clean, prune, list, find, doctor, alias, hosts, proxy, service
   // When `run` is used, skip these so args like "list" or "--help" are treated
   // as child-command tokens, not portless subcommands.
   if (!isRunCommand) {
@@ -4505,6 +4587,10 @@ async function main() {
     }
     if (args[0] === "list") {
       await handleList();
+      return;
+    }
+    if (args[0] === "find") {
+      await handleFind(args);
       return;
     }
     if (args[0] === "doctor") {
