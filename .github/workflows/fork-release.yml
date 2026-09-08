@@ -1,0 +1,83 @@
+name: Fork Release
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and upload package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack npm-compatible archive
+        id: package
+        run: |
+          pnpm --filter portless pack
+
+          VERSION=$(node -p "require('./packages/portless/package.json').version")
+          ARCHIVE="portless-$VERSION.tgz"
+          test -f "$ARCHIVE"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="v$VERSION-$SHORT_SHA"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$ARCHIVE"
+
+          printf '%s\n' \
+            'Install the npm-compatible Portless package directly from this release asset.' \
+            '' \
+            '```json' \
+            '{' \
+            '  "devDependencies": {' \
+            "    \"portless\": \"$RELEASE_URL\"" \
+            '  }' \
+            '}' \
+            '```' > release-notes.md
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" "$ARCHIVE" \
+              --target "$GITHUB_SHA" \
+              --title "portless $TAG" \
+              --notes-file release-notes.md
+          fi
