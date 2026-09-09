@@ -43,11 +43,24 @@ jobs:
       - name: Pack npm-compatible archive
         id: package
         run: |
+          pnpm --filter portless prepublishOnly
           pnpm --filter portless pack
 
           VERSION=$(node -p "require('./packages/portless/package.json').version")
           ARCHIVE="portless-$VERSION.tgz"
           test -f "$ARCHIVE"
+
+          for FILE in \
+            package/dist/cli.js \
+            package/dist/index.js \
+            package/dist/cli.d.ts \
+            package/dist/index.d.ts \
+            package/LICENSE \
+            package/README.md \
+            package/package.json
+          do
+            tar -tzf "$ARCHIVE" "$FILE" >/dev/null
+          done
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
