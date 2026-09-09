@@ -296,6 +296,7 @@ The chosen service configuration is written into launchd, systemd, or Task Sched
 | `portless list`                                   | Show active routes                                             |
 | `portless find <name>`                            | Find one active route by name                                  |
 | `portless find <name> --port-only`                | Print only the route's assigned app port                       |
+| `portless find <name> --no-worktree`              | Find the route without the current worktree prefix             |
 | `portless doctor`                                 | Check proxy, routes, DNS, CA trust, and LAN prerequisites      |
 | `portless trust`                                  | Add local CA to system trust store (for HTTPS)                 |
 | `portless clean`                                  | Remove state, CA trust entry, and /etc/hosts block             |

@@ -331,6 +331,54 @@ describe("CLI", () => {
       }
     });
 
+    it("finds a route with the current worktree prefix", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-worktree-"));
+      try {
+        const gitdir = path.join(tmpDir, "fake-bare.git", "worktrees", "wt");
+        fs.mkdirSync(gitdir, { recursive: true });
+        fs.writeFileSync(path.join(gitdir, "HEAD"), "ref: refs/heads/feature-auth\n");
+        fs.writeFileSync(path.join(tmpDir, ".git"), `gitdir: ${gitdir}\n`);
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([{ hostname: "feature-auth.backend.localhost", port: 4320, pid: 0 }])
+        );
+
+        const { status, stdout } = run(["find", "backend", "--port-only"], {
+          cwd: tmpDir,
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(0);
+        expect(stdout).toBe("4320\n");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("skips the current worktree prefix with --no-worktree", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-no-worktree-"));
+      try {
+        const gitdir = path.join(tmpDir, "fake-bare.git", "worktrees", "wt");
+        fs.mkdirSync(gitdir, { recursive: true });
+        fs.writeFileSync(path.join(gitdir, "HEAD"), "ref: refs/heads/feature-auth\n");
+        fs.writeFileSync(path.join(tmpDir, ".git"), `gitdir: ${gitdir}\n`);
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([{ hostname: "backend.localhost", port: 4320, pid: 0 }])
+        );
+
+        const { status, stdout } = run(["find", "backend", "--port-only", "--no-worktree"], {
+          cwd: tmpDir,
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(0);
+        expect(stdout).toBe("4320\n");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("exits 1 when the route is not active", () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-missing-"));
       try {
@@ -351,6 +399,7 @@ describe("CLI", () => {
       expect(status).toBe(0);
       expect(stdout).toContain("portless find <name>");
       expect(stdout).toContain("--port-only");
+      expect(stdout).toContain("--no-worktree");
     });
   });
 

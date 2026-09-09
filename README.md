@@ -387,6 +387,7 @@ portless alias --remove <name>   # Remove a static route
 portless list                    # Show active routes
 portless find <name>             # Find an active route by name
 portless find <name> --port-only # Print only the app port
+portless find <name> --no-worktree # Find without the worktree prefix
 portless doctor                  # Check proxy, routes, DNS, and CA trust
 portless trust                   # Add local CA to system trust store
 portless clean                   # Remove state, CA trust entry, and hosts block

@@ -124,9 +124,10 @@ Shows active routes and their assigned ports.
 ```bash
 portless find <name>
 portless find <name> --port-only
+portless find <name> --no-worktree
 ```
 
-Finds an active route by name. Use `--port-only` to print only its assigned app port.
+Finds an active route by name, including the current worktree prefix. Use `--port-only` to print only its assigned app port or `--no-worktree` to find the unprefixed route.
 
 ## Doctor
 
