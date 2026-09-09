@@ -2284,24 +2284,29 @@ ${colors.bold("Usage:")}
 
 ${colors.bold("Options:")}
   --port-only            Print only the app port
+  --no-worktree          Skip worktree prefix detection
   --help, -h             Show this help
 
 ${colors.bold("Examples:")}
   portless find backend
   BACKEND_PORT=$(portless find backend --port-only)
+  portless find backend --no-worktree
 `);
     process.exit(0);
   }
 
   const positional: string[] = [];
   let portOnly = false;
+  let skipWorktree = false;
 
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--port-only") {
       portOnly = true;
+    } else if (args[i] === "--no-worktree") {
+      skipWorktree = true;
     } else if (args[i].startsWith("-")) {
       console.error(colors.red(`Error: Unknown flag "${args[i]}".`));
-      console.error(colors.blue("Known flags: --port-only, --help"));
+      console.error(colors.blue("Known flags: --port-only, --no-worktree, --help"));
       process.exit(1);
     } else {
       positional.push(args[i]);
@@ -2313,17 +2318,19 @@ ${colors.bold("Examples:")}
       colors.red(`Error: ${positional.length === 0 ? "Missing" : "Too many"} route names.`)
     );
     console.error(colors.blue("Usage:"));
-    console.error(colors.cyan("  portless find <name> [--port-only]"));
+    console.error(colors.cyan("  portless find <name> [--port-only] [--no-worktree]"));
     process.exit(1);
   }
 
   const name = positional[0]!;
+  const worktree = skipWorktree ? null : detectWorktreePrefix();
+  const effectiveName = applyWorktreePrefix(name, worktree);
   const { dir, port, tls, tlds } = await discoverState();
   const store = new RouteStore(dir, {
     onWarning: (msg) => console.warn(colors.yellow(msg)),
   });
   const routes = store.loadRoutes();
-  const route = buildHostnames(name, tlds)
+  const route = buildHostnames(effectiveName, tlds)
     .map((hostname) => routes.find((candidate) => candidate.hostname === hostname))
     .find((candidate) => candidate !== undefined);
 
