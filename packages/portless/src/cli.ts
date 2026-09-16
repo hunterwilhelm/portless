@@ -2328,12 +2328,21 @@ ${colors.bold("Examples:")}
     onWarning: (msg) => console.warn(colors.yellow(msg)),
   });
   const routes = store.loadRoutes();
-  const route = buildHostnames(effectiveName, tlds)
+  const hostnamesToMatch = buildHostnames(effectiveName, tlds);
+  const route = hostnamesToMatch
     .map((hostname) => routes.find((candidate) => candidate.hostname === hostname))
     .find((candidate) => candidate !== undefined);
 
   if (!route) {
-    console.error(colors.red(`Error: No active route found for "${name}".`));
+    console.error(colors.red(`Error: No active route found for "${hostnamesToMatch[0]}".`));
+    if (worktree) {
+      console.error(
+        colors.blue(
+          `This directory is a linked git worktree, so "${worktree.prefix}" was prepended to "${name}".`
+        )
+      );
+      console.error(colors.blue("Use --no-worktree to search only the name you passed."));
+    }
     process.exit(1);
   }
 
