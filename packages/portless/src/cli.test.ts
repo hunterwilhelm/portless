@@ -331,6 +331,39 @@ describe("CLI", () => {
       }
     });
 
+    it("prints the app port for a dotted hostname among sibling routes", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-dotted-"));
+      try {
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([
+            { hostname: "dev.fidalgo2-sym-2020.localhost", port: 4056, pid: 28154 },
+            { hostname: "squaxin.dev.fidalgo2-sym-2020.localhost", port: 4352, pid: 28610 },
+            { hostname: "dev.fidalgo1.localhost", port: 4552, pid: 7941 },
+            { hostname: "squaxin.dev.fidalgo1.localhost", port: 4318, pid: 36831 },
+            { hostname: "api.dev.fidalgo1.localhost", port: 4161, pid: 80494 },
+            { hostname: "squaxin.dev.fidalgo2-sym-2062.localhost", port: 4131, pid: 91697 },
+            { hostname: "dev.fidalgo2-sym-2062.localhost", port: 4456, pid: 1561 },
+            { hostname: "api.dev.fidalgo2-sym-2062.localhost", port: 4329, pid: 2007 },
+          ])
+        );
+
+        const { status, stdout, stderr } = run(
+          ["find", "api.dev.fidalgo2-sym-2062", "--port-only"],
+          {
+            cwd: tmpDir,
+            env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+          }
+        );
+
+        expect(status).toBe(0);
+        expect(stdout).toBe("4329\n");
+        expect(stderr).toBe("");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("finds a route with the current worktree prefix", () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-worktree-"));
       try {
@@ -383,12 +416,54 @@ describe("CLI", () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-missing-"));
       try {
         const { status, stdout, stderr } = run(["find", "missing"], {
+          cwd: tmpDir,
           env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
         });
 
         expect(status).toBe(1);
         expect(stdout).toBe("");
-        expect(stderr).toContain('No active route found for "missing"');
+        expect(stderr).toContain('No active route found for "missing.localhost"');
+        expect(stderr).not.toContain("linked git worktree");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("explains a worktree prefix rewrite when no route matches", () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-missing-wt-"));
+      try {
+        const gitdir = path.join(tmpDir, "fake-bare.git", "worktrees", "wt");
+        fs.mkdirSync(gitdir, { recursive: true });
+        fs.writeFileSync(path.join(gitdir, "HEAD"), "ref: refs/heads/fidalgo2-sym-2062\n");
+        fs.writeFileSync(path.join(tmpDir, ".git"), `gitdir: ${gitdir}\n`);
+        fs.writeFileSync(
+          path.join(tmpDir, "routes.json"),
+          JSON.stringify([
+            { hostname: "dev.fidalgo2-sym-2020.localhost", port: 4056, pid: 28154 },
+            { hostname: "squaxin.dev.fidalgo2-sym-2020.localhost", port: 4352, pid: 28610 },
+            { hostname: "dev.fidalgo1.localhost", port: 4552, pid: 7941 },
+            { hostname: "squaxin.dev.fidalgo1.localhost", port: 4318, pid: 36831 },
+            { hostname: "api.dev.fidalgo1.localhost", port: 4161, pid: 80494 },
+            { hostname: "squaxin.dev.fidalgo2-sym-2062.localhost", port: 4131, pid: 91697 },
+            { hostname: "dev.fidalgo2-sym-2062.localhost", port: 4456, pid: 1561 },
+            { hostname: "api.dev.fidalgo2-sym-2062.localhost", port: 4329, pid: 2007 },
+          ])
+        );
+
+        const { status, stdout, stderr } = run(["find", "api.dev.fidalgo2-sym-2062"], {
+          cwd: tmpDir,
+          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        });
+
+        expect(status).toBe(1);
+        expect(stdout).toBe("");
+        expect(stderr).toContain(
+          'No active route found for "fidalgo2-sym-2062.api.dev.fidalgo2-sym-2062.localhost"'
+        );
+        expect(stderr).toContain(
+          'This directory is a linked git worktree, so "fidalgo2-sym-2062" was prepended to "api.dev.fidalgo2-sym-2062".'
+        );
+        expect(stderr).toContain("Use --no-worktree to search only the name you passed.");
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
