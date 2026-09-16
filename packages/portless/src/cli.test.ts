@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as os from "node:os";
@@ -391,22 +391,54 @@ describe("CLI", () => {
     it("skips the current worktree prefix with --no-worktree", () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "portless-find-no-worktree-"));
       try {
-        const gitdir = path.join(tmpDir, "fake-bare.git", "worktrees", "wt");
-        fs.mkdirSync(gitdir, { recursive: true });
-        fs.writeFileSync(path.join(gitdir, "HEAD"), "ref: refs/heads/feature-auth\n");
-        fs.writeFileSync(path.join(tmpDir, ".git"), `gitdir: ${gitdir}\n`);
+        const repo = path.join(tmpDir, "repo");
+        fs.mkdirSync(repo);
+        execFileSync("git", ["init"], { cwd: repo, stdio: "ignore" });
+        execFileSync("git", ["branch", "-M", "main"], { cwd: repo, stdio: "ignore" });
+        execFileSync(
+          "git",
+          [
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "init",
+          ],
+          { cwd: repo, stdio: "ignore" }
+        );
+        execFileSync("git", ["branch", "feature-auth"], { cwd: repo, stdio: "ignore" });
+        const wtDir = path.join(tmpDir, "wt");
+        execFileSync("git", ["worktree", "add", wtDir, "feature-auth"], {
+          cwd: repo,
+          stdio: "ignore",
+        });
         fs.writeFileSync(
-          path.join(tmpDir, "routes.json"),
-          JSON.stringify([{ hostname: "backend.localhost", port: 4320, pid: 0 }])
+          path.join(wtDir, "routes.json"),
+          JSON.stringify([
+            { hostname: "backend.localhost", port: 4320, pid: 0 },
+            { hostname: "api.dev.fidalgo2-sym-2062.localhost", port: 4329, pid: 0 },
+          ])
         );
 
-        const { status, stdout } = run(["find", "backend", "--port-only", "--no-worktree"], {
-          cwd: tmpDir,
-          env: { PORTLESS_STATE_DIR: tmpDir, PORTLESS_HTTPS: "0" },
+        const skipped = run(["find", "backend", "--port-only", "--no-worktree"], {
+          cwd: wtDir,
+          env: { PORTLESS_STATE_DIR: wtDir, PORTLESS_HTTPS: "0" },
         });
+        expect(skipped.status).toBe(0);
+        expect(skipped.stdout).toBe("4320\n");
 
-        expect(status).toBe(0);
-        expect(stdout).toBe("4320\n");
+        const dotted = run(["find", "api.dev.fidalgo2-sym-2062", "--port-only", "--no-worktree"], {
+          cwd: wtDir,
+          env: { PORTLESS_STATE_DIR: wtDir, PORTLESS_HTTPS: "0" },
+        });
+        expect(dotted.status).toBe(0);
+        expect(dotted.stdout).toBe("4329\n");
+        expect(dotted.stderr).toBe("");
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
