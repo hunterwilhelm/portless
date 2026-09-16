@@ -2273,7 +2273,7 @@ async function handleList(): Promise<void> {
   listRoutes(store, port, tls);
 }
 
-async function handleFind(args: string[]): Promise<void> {
+async function handleFind(args: string[], skipWorktree = false): Promise<void> {
   if (args[1] === "--help" || args[1] === "-h") {
     console.log(`
 ${colors.bold("portless find")} - Find an active route by name.
@@ -2297,7 +2297,6 @@ ${colors.bold("Examples:")}
 
   const positional: string[] = [];
   let portOnly = false;
-  let skipWorktree = false;
 
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--port-only") {
@@ -4606,7 +4605,7 @@ async function main() {
       return;
     }
     if (args[0] === "find") {
-      await handleFind(args);
+      await handleFind(args, skipWorktree);
       return;
     }
     if (args[0] === "doctor") {
